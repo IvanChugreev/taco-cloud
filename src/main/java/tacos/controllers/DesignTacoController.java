@@ -8,11 +8,15 @@ import org.springframework.ui.Model;
 import org.springframework.validation.Errors;
 import org.springframework.web.bind.annotation.*;
 import tacos.data.repositories.IngredientRepository;
+import tacos.data.repositories.TacoRepository;
+import tacos.data.repositories.UserRepository;
 import tacos.models.Ingredient;
 import tacos.models.Ingredient.Type;
 import tacos.models.Taco;
 import tacos.models.TacoOrder;
+import tacos.models.User;
 
+import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -26,9 +30,15 @@ public class DesignTacoController {
 
     private final IngredientRepository ingredientRepo;
 
+    private final TacoRepository tacoRepo;
+
+    private final UserRepository userRepo;
+
     @Autowired
-    public DesignTacoController(IngredientRepository ingredientRepo) {
+    public DesignTacoController(IngredientRepository ingredientRepo, TacoRepository tacoRepo, UserRepository userRepo) {
         this.ingredientRepo = ingredientRepo;
+        this.tacoRepo = tacoRepo;
+        this.userRepo = userRepo;
     }
 
     @ModelAttribute
@@ -49,6 +59,12 @@ public class DesignTacoController {
         return new Taco();
     }
 
+    @ModelAttribute(name = "user")
+    public User user(Principal principal) {
+        String username = principal.getName();
+        return userRepo.findByUsername(username);
+    }
+
     @GetMapping
     public String showDesignForm() {
         return "design";
@@ -59,8 +75,8 @@ public class DesignTacoController {
         if (errors.hasErrors()) {
             return "design";
         }
-        tacoOrder.addTaco(taco);
-        log.info("Processing taco: {}", taco);
+        Taco savedTaco = tacoRepo.save(taco);
+        tacoOrder.addTaco(savedTaco);
         return "redirect:/orders/current";
     }
 
