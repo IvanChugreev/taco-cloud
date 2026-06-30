@@ -6,3 +6,8 @@ spring:
   datasource:
     generate-unique-name: false
     name: tacocloud
+  h2:
+    console:
+      enabled: false
+  jpa:
+    open-in-view: false

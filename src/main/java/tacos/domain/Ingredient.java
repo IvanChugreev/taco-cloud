@@ -1,4 +1,4 @@
-package tacos.models;
+package tacos.domain;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -23,5 +23,4 @@ public class Ingredient {
     public enum Type {
         WRAP, PROTEIN, VEGGIES, CHEESE, SAUCE
     }
-
 }

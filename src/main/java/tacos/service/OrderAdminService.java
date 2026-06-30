@@ -1,9 +1,9 @@
-package tacos.data.services;
+package tacos.service;
 
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
-import tacos.data.repositories.OrderRepository;
-
+import org.springframework.transaction.annotation.Transactional;
+import tacos.repository.OrderRepository;
 
 @Service
 public class OrderAdminService {
@@ -14,9 +14,9 @@ public class OrderAdminService {
         this.orderRepository = orderRepository;
     }
 
+    @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteAllOrders() {
         orderRepository.deleteAll();
     }
-
 }

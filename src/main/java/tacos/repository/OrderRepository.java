@@ -1,7 +1,7 @@
-package tacos.data.repositories;
+package tacos.repository;
 
 import org.springframework.data.repository.CrudRepository;
-import tacos.models.TacoOrder;
+import tacos.domain.TacoOrder;
 
 public interface OrderRepository extends CrudRepository<TacoOrder, Long> {
 }

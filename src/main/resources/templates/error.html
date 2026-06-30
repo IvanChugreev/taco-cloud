@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head>
+    <title>Taco Cloud - Error</title>
+</head>
+<body>
+    <h1>Something went wrong</h1>
+    <p>
+        <strong th:text="${status}">500</strong>
+        <span th:text="${error}">Internal Server Error</span>
+    </p>
+    <p th:text="${message}">An unexpected error occurred.</p>
+    <p>Path: <code th:text="${path}">/</code></p>
+    <a th:href="@{/}">Return home</a>
+</body>
+</html>

@@ -8,34 +8,41 @@
     <h1>Register</h1>
     <img th:src="@{/images/TacoCloud.png}" alt="Taco-cloud"/>
 
-    <form method="POST" th:action="@{/register}" id="registerForm">
+    <form method="POST" th:action="@{/register}" th:object="${registrationForm}" id="registerForm">
+
+        <div class="validationError" th:if="${#fields.hasAnyErrors()}">
+            <p>Please correct the following problems:</p>
+            <ul>
+                <li th:each="error : ${#fields.allErrors()}" th:text="${error}">Validation error</li>
+            </ul>
+        </div>
 
         <label for="username">Username:</label>
-        <input id="username" type="text" name="username"/><br/>
+        <input id="username" type="text" th:field="*{username}"/><br/>
 
         <label for="password">Password: </label>
-        <input id="password" type="password" name="password"/><br/>
+        <input id="password" type="password" th:field="*{password}"/><br/>
 
         <label for="confirm">Confirm password: </label>
-        <input id="confirm" type="password" name="confirm"/><br/>
+        <input id="confirm" type="password" th:field="*{confirm}"/><br/>
 
         <label for="fullname">Full name: </label>
-        <input id="fullname" type="text" name="fullname"/><br/>
+        <input id="fullname" type="text" th:field="*{fullname}"/><br/>
 
         <label for="street">Street: </label>
-        <input id="street" type="text" name="street"/><br/>
+        <input id="street" type="text" th:field="*{street}"/><br/>
 
         <label for="city">City: </label>
-        <input id="city" type="text" name="city"/><br/>
+        <input id="city" type="text" th:field="*{city}"/><br/>
 
         <label for="state">State: </label>
-        <input id="state" type="text" name="state"/><br/>
+        <input id="state" type="text" th:field="*{state}"/><br/>
 
         <label for="zip">Zip: </label>
-        <input id="zip" type="text" name="zip"/><br/>
+        <input id="zip" type="text" th:field="*{zip}"/><br/>
 
         <label for="phone">Phone: </label>
-        <input id="phone" type="text" name="phone"/><br/>
+        <input id="phone" type="text" th:field="*{phone}"/><br/>
 
         <input type="submit" value="Register"/>
     </form>
