@@ -1,0 +1,8 @@
+spring:
+  datasource:
+    url: jdbc:tc:postgresql:17-alpine:///tacocloud
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+    username: ${TEST_DB_USERNAME:test}
+    password: ${TEST_DB_PASSWORD:test}
+  flyway:
+    locations: classpath:db/migration,classpath:db/dev

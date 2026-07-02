@@ -1,5 +1,6 @@
 package tacos.domain;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -28,16 +29,31 @@ public class User implements UserDetails {
     private static final long serialVersionUID = 1L;
 
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = false, unique = true, length = 64)
     private final String username;
+
+    @Column(nullable = false)
     private final String password;
+
+    @Column(nullable = false, length = 128)
     private final String fullname;
+
+    @Column(nullable = false)
     private final String street;
+
+    @Column(nullable = false, length = 128)
     private final String city;
+
+    @Column(nullable = false, length = 64)
     private final String state;
+
+    @Column(nullable = false, length = 32)
     private final String zip;
+
+    @Column(name = "phone_number", nullable = false, length = 32)
     private final String phoneNumber;
 
     @Override

@@ -28,7 +28,6 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         return http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/h2-console/**").denyAll()
                         .requestMatchers("/design/**", "/orders/**").hasRole("USER")
                         .anyRequest().permitAll())
                 .formLogin(form -> form.loginPage("/login").defaultSuccessUrl("/design"))
