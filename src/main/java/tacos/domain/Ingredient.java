@@ -11,6 +11,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+
 @Data
 @Entity
 @Table(name = "ingredients")
@@ -28,6 +30,9 @@ public class Ingredient {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private final Type type;
+
+    @Column(nullable = false, precision = 10, scale = 2)
+    private final BigDecimal price;
 
     public enum Type {
         WRAP, PROTEIN, VEGGIES, CHEESE, SAUCE

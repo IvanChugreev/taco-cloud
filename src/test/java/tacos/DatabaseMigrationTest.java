@@ -8,6 +8,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -33,9 +34,13 @@ class DatabaseMigrationTest {
         Integer ingredientCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM ingredients",
                 Integer.class);
+        BigDecimal catalogPrice = jdbcTemplate.queryForObject(
+                "SELECT SUM(price) FROM ingredients",
+                BigDecimal.class);
 
-        assertEquals(5, successfulMigrations);
+        assertEquals(6, successfulMigrations);
         assertEquals(10, ingredientCount);
+        assertEquals(new BigDecimal("12.50"), catalogPrice);
     }
 
     @Test
@@ -51,7 +56,7 @@ class DatabaseMigrationTest {
                 String.class);
         assertTrue(indexNames.contains("idx_orders_user_id"));
         assertTrue(indexNames.contains("idx_orders_status"));
-        assertTrue(indexNames.contains("idx_orders_placed_at"));
+        assertTrue(indexNames.contains("idx_orders_created_at"));
 
         String insertUser = """
                 INSERT INTO users (

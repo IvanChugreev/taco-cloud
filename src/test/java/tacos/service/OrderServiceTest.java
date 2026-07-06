@@ -6,6 +6,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import tacos.domain.Ingredient;
+import tacos.domain.Ingredient.Type;
+import tacos.domain.OrderStatus;
 import tacos.domain.Taco;
 import tacos.domain.TacoOrder;
 import tacos.domain.User;
@@ -17,11 +20,15 @@ import tacos.repository.OrderRepository;
 import tacos.repository.TacoRepository;
 import tacos.repository.UserRepository;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -71,21 +78,24 @@ class OrderServiceTest {
         Taco taco = new Taco();
         taco.setId(10L);
         taco.setName("Test Taco");
+        taco.setIngredients(List.of(
+                new Ingredient("FLTO", "Flour Tortilla", Type.WRAP, new BigDecimal("1.00")),
+                new Ingredient("GRBF", "Ground Beef", Type.PROTEIN, new BigDecimal("2.50"))));
         when(userRepository.findByUsername("user")).thenReturn(user());
         when(tacoRepository.findAllById(List.of(10L))).thenReturn(List.of(taco));
-        when(orderRepository.save(any(TacoOrder.class))).thenAnswer(invocation -> {
-            TacoOrder order = invocation.getArgument(0);
-            order.setId(99L);
-            return order;
-        });
+        when(orderRepository.save(any(TacoOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        Long orderId = orderService.placeOrder(form, "user");
+        UUID orderUuid = orderService.placeOrder(form, "user");
 
         ArgumentCaptor<TacoOrder> orderCaptor = ArgumentCaptor.forClass(TacoOrder.class);
         verify(orderRepository).save(orderCaptor.capture());
-        assertEquals(99L, orderId);
-        assertEquals(List.of(taco), orderCaptor.getValue().getTacos());
-        assertEquals("user", orderCaptor.getValue().getUser().getUsername());
+        TacoOrder savedOrder = orderCaptor.getValue();
+        assertEquals(savedOrder.getOrderUuid(), orderUuid);
+        assertEquals(List.of(taco), savedOrder.getTacos());
+        assertEquals("user", savedOrder.getUser().getUsername());
+        assertEquals(OrderStatus.CREATED, savedOrder.getStatus());
+        assertEquals(new BigDecimal("3.50"), savedOrder.getTotalPrice());
+        assertEquals("Test User", savedOrder.getDeliveryAddress().getRecipientName());
     }
 
     @Test
@@ -97,6 +107,33 @@ class OrderServiceTest {
         assertThrows(ResourceNotFoundException.class, () -> orderService.placeOrder(form, "user"));
 
         verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void transitionOrderDelegatesToDomainModelWhenVersionMatches() {
+        UUID orderUuid = UUID.randomUUID();
+        TacoOrder order = mock(TacoOrder.class);
+        when(order.getVersion()).thenReturn(3L);
+        when(orderRepository.findByOrderUuid(orderUuid)).thenReturn(Optional.of(order));
+
+        orderService.transitionOrder(orderUuid, OrderStatus.ACCEPTED, 3L);
+
+        verify(order).transitionTo(OrderStatus.ACCEPTED);
+    }
+
+    @Test
+    void transitionOrderRejectsStaleVersion() {
+        UUID orderUuid = UUID.randomUUID();
+        TacoOrder order = mock(TacoOrder.class);
+        when(order.getVersion()).thenReturn(4L);
+        when(order.getOrderUuid()).thenReturn(orderUuid);
+        when(orderRepository.findByOrderUuid(orderUuid)).thenReturn(Optional.of(order));
+
+        assertThrows(
+                OrderVersionConflictException.class,
+                () -> orderService.transitionOrder(orderUuid, OrderStatus.ACCEPTED, 3L));
+
+        verify(order, never()).transitionTo(any());
     }
 
     private OrderForm orderForm() {

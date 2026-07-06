@@ -13,7 +13,7 @@ import java.util.List;
 public class TacoMapper {
 
     public IngredientDto toDto(Ingredient ingredient) {
-        return new IngredientDto(ingredient.getId(), ingredient.getName());
+        return new IngredientDto(ingredient.getId(), ingredient.getName(), ingredient.getPrice());
     }
 
     public Taco toEntity(TacoForm form, List<Ingredient> ingredients) {

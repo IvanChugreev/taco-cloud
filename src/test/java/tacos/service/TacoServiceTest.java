@@ -15,6 +15,7 @@ import tacos.mapper.TacoMapper;
 import tacos.repository.IngredientRepository;
 import tacos.repository.TacoRepository;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -46,8 +47,8 @@ class TacoServiceTest {
         form.setName("Test Taco");
         form.setIngredientIds(List.of("FLTO", "GRBF"));
         List<Ingredient> ingredients = List.of(
-                new Ingredient("FLTO", "Flour Tortilla", Type.WRAP),
-                new Ingredient("GRBF", "Ground Beef", Type.PROTEIN));
+                ingredient("FLTO", "Flour Tortilla", Type.WRAP),
+                ingredient("GRBF", "Ground Beef", Type.PROTEIN));
         when(ingredientRepository.findAllById(List.of("FLTO", "GRBF"))).thenReturn(ingredients);
         when(tacoRepository.save(any(Taco.class))).thenAnswer(invocation -> {
             Taco taco = invocation.getArgument(0);
@@ -68,7 +69,7 @@ class TacoServiceTest {
         form.setName("Test Taco");
         form.setIngredientIds(List.of("FLTO", "UNKNOWN"));
         when(ingredientRepository.findAllById(List.of("FLTO", "UNKNOWN")))
-                .thenReturn(List.of(new Ingredient("FLTO", "Flour Tortilla", Type.WRAP)));
+                .thenReturn(List.of(ingredient("FLTO", "Flour Tortilla", Type.WRAP)));
 
         assertThrows(ResourceNotFoundException.class, () -> tacoService.createTaco(form));
 
@@ -78,11 +79,11 @@ class TacoServiceTest {
     @Test
     void getIngredientCatalogGroupsIngredientsByType() {
         when(ingredientRepository.findAll()).thenReturn(List.of(
-                new Ingredient("FLTO", "Flour Tortilla", Type.WRAP),
-                new Ingredient("GRBF", "Ground Beef", Type.PROTEIN),
-                new Ingredient("CHED", "Cheddar", Type.CHEESE),
-                new Ingredient("TMTO", "Diced Tomatoes", Type.VEGGIES),
-                new Ingredient("SLSA", "Salsa", Type.SAUCE)));
+                ingredient("FLTO", "Flour Tortilla", Type.WRAP),
+                ingredient("GRBF", "Ground Beef", Type.PROTEIN),
+                ingredient("CHED", "Cheddar", Type.CHEESE),
+                ingredient("TMTO", "Diced Tomatoes", Type.VEGGIES),
+                ingredient("SLSA", "Salsa", Type.SAUCE)));
 
         IngredientCatalog catalog = tacoService.getIngredientCatalog();
 
@@ -91,5 +92,10 @@ class TacoServiceTest {
         assertEquals("CHED", catalog.getCheeses().get(0).getId());
         assertEquals("TMTO", catalog.getVeggies().get(0).getId());
         assertEquals("SLSA", catalog.getSauces().get(0).getId());
+        assertEquals(BigDecimal.ONE, catalog.getWraps().get(0).getPrice());
+    }
+
+    private Ingredient ingredient(String id, String name, Type type) {
+        return new Ingredient(id, name, type, BigDecimal.ONE);
     }
 }

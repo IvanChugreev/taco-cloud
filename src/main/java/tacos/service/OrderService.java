@@ -3,10 +3,13 @@ package tacos.service;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import tacos.domain.Ingredient;
+import tacos.domain.OrderStatus;
 import tacos.domain.Taco;
 import tacos.domain.TacoOrder;
 import tacos.domain.User;
 import tacos.dto.OrderForm;
+import tacos.dto.OrderUpdateCommand;
 import tacos.dto.UserProfile;
 import tacos.mapper.OrderMapper;
 import tacos.mapper.UserMapper;
@@ -14,8 +17,11 @@ import tacos.repository.OrderRepository;
 import tacos.repository.TacoRepository;
 import tacos.repository.UserRepository;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 
 @Service
 public class OrderService {
@@ -60,15 +66,30 @@ public class OrderService {
     }
 
     @Transactional
-    public Long placeOrder(OrderForm form, String username) {
+    public UUID placeOrder(OrderForm form, String username) {
         User user = findUser(username);
         List<Long> tacoIds = form.tacoIds().stream().distinct().toList();
         List<Taco> tacos = toList(tacoRepository.findAllById(tacoIds));
         if (tacos.size() != tacoIds.size()) {
             throw new ResourceNotFoundException("One or more tacos were not found");
         }
-        TacoOrder savedOrder = orderRepository.save(orderMapper.toEntity(form, user, tacos));
-        return savedOrder.getId();
+        BigDecimal totalPrice = calculateTotalPrice(tacos);
+        TacoOrder savedOrder = orderRepository.save(orderMapper.toEntity(form, user, tacos, totalPrice));
+        return savedOrder.getOrderUuid();
+    }
+
+    @Transactional
+    public void transitionOrder(UUID orderUuid, OrderStatus targetStatus, long expectedVersion) {
+        TacoOrder order = findOrder(orderUuid);
+        verifyVersion(order, expectedVersion);
+        order.transitionTo(targetStatus);
+    }
+
+    @Transactional
+    public void updateOrder(UUID orderUuid, OrderUpdateCommand command) {
+        TacoOrder order = findOrder(orderUuid);
+        verifyVersion(order, command.getVersion());
+        order.updateDeliveryDetails(orderMapper.toAddress(command), command.getComment());
     }
 
     private User findUser(String username) {
@@ -77,6 +98,25 @@ public class OrderService {
             throw new ResourceNotFoundException("User '" + username + "' not found");
         }
         return user;
+    }
+
+    private TacoOrder findOrder(UUID orderUuid) {
+        return orderRepository.findByOrderUuid(orderUuid)
+                .orElseThrow(() -> new ResourceNotFoundException("Order '" + orderUuid + "' not found"));
+    }
+
+    private void verifyVersion(TacoOrder order, Long expectedVersion) {
+        if (!Objects.equals(order.getVersion(), expectedVersion)) {
+            throw new OrderVersionConflictException(
+                    order.getOrderUuid(), expectedVersion, order.getVersion());
+        }
+    }
+
+    private BigDecimal calculateTotalPrice(List<Taco> tacos) {
+        return tacos.stream()
+                .flatMap(taco -> taco.getIngredients().stream())
+                .map(Ingredient::getPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private static <T> List<T> toList(Iterable<T> values) {

@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 import org.hibernate.validator.constraints.CreditCardNumber;
 
@@ -32,6 +33,9 @@ public class OrderForm implements Serializable {
 
     @NotBlank(message = "Zip code is required")
     private String deliveryZip;
+
+    @Size(max = 500, message = "Comment must not exceed 500 characters")
+    private String comment;
 
     @CreditCardNumber(message = "Not a valid credit card number")
     @NotBlank(message = "Credit card number is required")

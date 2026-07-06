@@ -17,7 +17,7 @@
                 <div th:each="ingredient : ${wrap}">
                     <label>
                         <input th:field="*{ingredientIds}" type="checkbox" th:value="${ingredient.id}"/>
-                        <span th:text="${ingredient.name}">INGREDIENT</span>
+                        <span th:text="${ingredient.name + ' — ' + ingredient.price}">INGREDIENT</span>
                     </label>
                     <br/>
                 </div>
@@ -27,7 +27,7 @@
                 <div th:each="ingredient : ${protein}">
                     <label>
                         <input th:field="*{ingredientIds}" type="checkbox" th:value="${ingredient.id}"/>
-                        <span th:text="${ingredient.name}">INGREDIENT</span>
+                        <span th:text="${ingredient.name + ' — ' + ingredient.price}">INGREDIENT</span>
                     </label>
                     <br/>
                 </div>
@@ -37,7 +37,7 @@
                 <div th:each="ingredient : ${cheese}">
                     <label>
                         <input th:field="*{ingredientIds}" type="checkbox" th:value="${ingredient.id}"/>
-                        <span th:text="${ingredient.name}">INGREDIENT</span>
+                        <span th:text="${ingredient.name + ' — ' + ingredient.price}">INGREDIENT</span>
                     </label>
                     <br/>
                 </div>
@@ -47,7 +47,7 @@
                 <div th:each="ingredient : ${veggies}">
                     <label>
                         <input th:field="*{ingredientIds}" type="checkbox" th:value="${ingredient.id}"/>
-                        <span th:text="${ingredient.name}">INGREDIENT</span>
+                        <span th:text="${ingredient.name + ' — ' + ingredient.price}">INGREDIENT</span>
                     </label>
                     <br/>
                 </div>
@@ -57,7 +57,7 @@
                 <div th:each="ingredient : ${sauce}">
                     <label>
                         <input th:field="*{ingredientIds}" type="checkbox" th:value="${ingredient.id}"/>
-                        <span th:text="${ingredient.name}">INGREDIENT</span>
+                        <span th:text="${ingredient.name + ' — ' + ingredient.price}">INGREDIENT</span>
                     </label>
                     <br/>
                 </div>
