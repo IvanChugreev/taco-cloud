@@ -15,13 +15,33 @@ import java.util.List;
 public class OrderMapper {
 
     public TacoOrder toEntity(OrderForm form, User user, List<Taco> tacos, BigDecimal totalPrice) {
-        return TacoOrder.create(
+        return toEntity(
                 user,
                 toAddress(form),
                 form.getComment(),
                 form.getCcNumber(),
                 form.getCcExpiration(),
                 form.getCcCVV(),
+                tacos,
+                totalPrice);
+    }
+
+    public TacoOrder toEntity(
+            User user,
+            DeliveryAddress deliveryAddress,
+            String comment,
+            String ccNumber,
+            String ccExpiration,
+            String ccCvv,
+            List<Taco> tacos,
+            BigDecimal totalPrice) {
+        return TacoOrder.create(
+                user,
+                deliveryAddress,
+                comment,
+                ccNumber,
+                ccExpiration,
+                ccCvv,
                 tacos,
                 totalPrice);
     }

@@ -14,6 +14,7 @@ import tacos.domain.TacoOrder;
 import tacos.domain.User;
 import tacos.dto.OrderForm;
 import tacos.dto.TacoSummary;
+import tacos.mapper.ApiMapper;
 import tacos.mapper.OrderMapper;
 import tacos.mapper.UserMapper;
 import tacos.repository.OrderRepository;
@@ -54,7 +55,8 @@ class OrderServiceTest {
                 tacoRepository,
                 userRepository,
                 new OrderMapper(),
-                new UserMapper());
+                new UserMapper(),
+                new ApiMapper());
     }
 
     @Test
