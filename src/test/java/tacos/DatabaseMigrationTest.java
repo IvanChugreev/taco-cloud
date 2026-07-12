@@ -38,7 +38,7 @@ class DatabaseMigrationTest {
                 "SELECT SUM(price) FROM ingredients",
                 BigDecimal.class);
 
-        assertEquals(6, successfulMigrations);
+        assertEquals(7, successfulMigrations);
         assertEquals(10, ingredientCount);
         assertEquals(new BigDecimal("12.50"), catalogPrice);
     }

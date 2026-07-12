@@ -3,6 +3,7 @@ package tacos.service;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -117,26 +118,25 @@ public class OrderService {
             Instant createdFrom,
             Instant createdTo,
             Pageable pageable) {
-        if (createdFrom != null && createdTo != null && createdFrom.isAfter(createdTo)) {
-            throw new InvalidOrderFilterException("createdFrom must not be after createdTo");
-        }
         Specification<TacoOrder> specification = (root, query, builder) ->
                 builder.equal(root.get("user").get("username"), username);
-        if (status != null) {
-            specification = specification.and((root, query, builder) ->
-                    builder.equal(root.get("status"), status));
-        }
-        if (createdFrom != null) {
-            specification = specification.and((root, query, builder) ->
-                    builder.greaterThanOrEqualTo(root.get("createdAt"), createdFrom));
-        }
-        if (createdTo != null) {
-            specification = specification.and((root, query, builder) ->
-                    builder.lessThanOrEqualTo(root.get("createdAt"), createdTo));
-        }
-        Page<OrderResponse> orders = orderRepository.findAll(specification, pageable)
-                .map(apiMapper::toOrderResponse);
-        return PageResponse.from(orders);
+        return findOrders(specification, status, createdFrom, createdTo, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasRole('ADMIN')")
+    public OrderResponse getAnyOrder(UUID orderUuid) {
+        return apiMapper.toOrderResponse(findOrder(orderUuid));
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasRole('ADMIN')")
+    public PageResponse<OrderResponse> getAllOrders(
+            OrderStatus status,
+            Instant createdFrom,
+            Instant createdTo,
+            Pageable pageable) {
+        return findOrders(null, status, createdFrom, createdTo, pageable);
     }
 
     @Transactional
@@ -149,10 +149,13 @@ public class OrderService {
     }
 
     @Transactional
-    public void transitionOrder(UUID orderUuid, OrderStatus targetStatus, long expectedVersion) {
+    @PreAuthorize("hasAnyRole('KITCHEN', 'ADMIN')")
+    public OrderResponse transitionOrder(UUID orderUuid, OrderStatus targetStatus, long expectedVersion) {
         TacoOrder order = findOrder(orderUuid);
         verifyVersion(order, expectedVersion);
         order.transitionTo(targetStatus);
+        orderRepository.flush();
+        return apiMapper.toOrderResponse(order);
     }
 
     @Transactional
@@ -178,6 +181,42 @@ public class OrderService {
     private TacoOrder findOwnedOrder(UUID orderUuid, String username) {
         return orderRepository.findByOrderUuidAndUserUsername(orderUuid, username)
                 .orElseThrow(() -> new ResourceNotFoundException("Order '" + orderUuid + "' not found"));
+    }
+
+    private PageResponse<OrderResponse> findOrders(
+            Specification<TacoOrder> specification,
+            OrderStatus status,
+            Instant createdFrom,
+            Instant createdTo,
+            Pageable pageable) {
+        if (createdFrom != null && createdTo != null && createdFrom.isAfter(createdTo)) {
+            throw new InvalidOrderFilterException("createdFrom must not be after createdTo");
+        }
+        Specification<TacoOrder> resultSpecification = specification;
+        if (status != null) {
+            resultSpecification = and(resultSpecification, (root, query, builder) ->
+                    builder.equal(root.get("status"), status));
+        }
+        if (createdFrom != null) {
+            resultSpecification = and(resultSpecification, (root, query, builder) ->
+                    builder.greaterThanOrEqualTo(root.get("createdAt"), createdFrom));
+        }
+        if (createdTo != null) {
+            resultSpecification = and(resultSpecification, (root, query, builder) ->
+                    builder.lessThanOrEqualTo(root.get("createdAt"), createdTo));
+        }
+        Page<OrderResponse> orders = orderRepository.findAll(resultSpecification, pageable)
+                .map(apiMapper::toOrderResponse);
+        return PageResponse.from(orders);
+    }
+
+    private Specification<TacoOrder> and(
+            Specification<TacoOrder> specification,
+            Specification<TacoOrder> next) {
+        if (specification == null) {
+            return next;
+        }
+        return specification.and(next);
     }
 
     private List<Taco> loadTacos(List<Long> requestedIds) {

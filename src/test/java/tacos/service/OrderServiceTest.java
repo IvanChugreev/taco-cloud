@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import tacos.domain.DeliveryAddress;
 import tacos.domain.Ingredient;
 import tacos.domain.Ingredient.Type;
 import tacos.domain.OrderStatus;
@@ -22,6 +23,7 @@ import tacos.repository.TacoRepository;
 import tacos.repository.UserRepository;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -116,11 +118,24 @@ class OrderServiceTest {
         UUID orderUuid = UUID.randomUUID();
         TacoOrder order = mock(TacoOrder.class);
         when(order.getVersion()).thenReturn(3L);
+        when(order.getOrderUuid()).thenReturn(orderUuid);
+        when(order.getStatus()).thenReturn(OrderStatus.ACCEPTED);
+        when(order.getCreatedAt()).thenReturn(Instant.parse("2026-07-10T00:00:00Z"));
+        when(order.getUpdatedAt()).thenReturn(Instant.parse("2026-07-10T00:00:00Z"));
+        when(order.getTotalPrice()).thenReturn(BigDecimal.ZERO);
+        when(order.getDeliveryAddress()).thenReturn(new DeliveryAddress(
+                "Test User",
+                "1 Test Street",
+                "Test City",
+                "TS",
+                "12345"));
+        when(order.getTacos()).thenReturn(List.of());
         when(orderRepository.findByOrderUuid(orderUuid)).thenReturn(Optional.of(order));
 
         orderService.transitionOrder(orderUuid, OrderStatus.ACCEPTED, 3L);
 
         verify(order).transitionTo(OrderStatus.ACCEPTED);
+        verify(orderRepository).flush();
     }
 
     @Test

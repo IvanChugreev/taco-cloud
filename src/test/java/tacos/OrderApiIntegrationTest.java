@@ -47,8 +47,12 @@ class OrderApiIntegrationTest {
 
     private String username;
     private String otherUsername;
+    private String kitchenUsername;
+    private String adminUsername;
     private Long userId;
     private Long otherUserId;
+    private Long kitchenUserId;
+    private Long adminUserId;
     private Long tacoId;
 
     @BeforeEach
@@ -56,8 +60,12 @@ class OrderApiIntegrationTest {
         String marker = UUID.randomUUID().toString();
         username = "api-" + marker;
         otherUsername = "api-other-" + marker;
-        userId = insertUser(username);
-        otherUserId = insertUser(otherUsername);
+        kitchenUsername = "api-kitchen-" + marker;
+        adminUsername = "api-admin-" + marker;
+        userId = insertUser(username, "CUSTOMER");
+        otherUserId = insertUser(otherUsername, "CUSTOMER");
+        kitchenUserId = insertUser(kitchenUsername, "KITCHEN");
+        adminUserId = insertUser(adminUsername, "ADMIN");
         tacoId = jdbcTemplate.queryForObject(
                 "INSERT INTO tacos (name) VALUES ('API Test Taco') RETURNING id",
                 Long.class);
@@ -76,7 +84,12 @@ class OrderApiIntegrationTest {
         jdbcTemplate.update("DELETE FROM orders WHERE user_id IN (?, ?)", userId, otherUserId);
         jdbcTemplate.update("DELETE FROM taco_ingredients WHERE taco_id = ?", tacoId);
         jdbcTemplate.update("DELETE FROM tacos WHERE id = ?", tacoId);
-        jdbcTemplate.update("DELETE FROM users WHERE id IN (?, ?)", userId, otherUserId);
+        jdbcTemplate.update(
+                "DELETE FROM users WHERE id IN (?, ?, ?, ?)",
+                userId,
+                otherUserId,
+                kitchenUserId,
+                adminUserId);
     }
 
     @Test
@@ -188,6 +201,76 @@ class OrderApiIntegrationTest {
     }
 
     @Test
+    void enforcesCustomerKitchenAndAdminAccessRules() throws Exception {
+        String responseBody = mockMvc.perform(post("/api/v1/orders")
+                        .with(httpBasic(username, PASSWORD))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validOrderRequest()))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode createdOrder = objectMapper.readTree(responseBody);
+        String orderId = createdOrder.required("id").asText();
+
+        mockMvc.perform(get("/api/v1/orders/{id}", orderId))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(401));
+
+        mockMvc.perform(get("/api/v1/orders/{id}", orderId)
+                        .with(httpBasic(username, PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(orderId));
+
+        mockMvc.perform(get("/api/v1/orders/{id}", orderId)
+                        .with(httpBasic(otherUsername, PASSWORD)))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(404));
+
+        mockMvc.perform(get("/api/v1/orders/{id}", orderId)
+                        .with(httpBasic(adminUsername, PASSWORD)))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(403));
+
+        mockMvc.perform(get("/api/v1/orders")
+                        .with(httpBasic(adminUsername, PASSWORD)))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(403));
+
+        mockMvc.perform(get("/api/v1/admin/orders/{id}", orderId)
+                        .with(httpBasic(username, PASSWORD)))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(403));
+
+        mockMvc.perform(get("/api/v1/admin/orders/{id}", orderId)
+                        .with(httpBasic(adminUsername, PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(orderId));
+
+        mockMvc.perform(post("/api/v1/kitchen/orders/{id}/status", orderId)
+                        .with(httpBasic(username, PASSWORD))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"ACCEPTED\",\"version\":0}"))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(403));
+
+        mockMvc.perform(post("/api/v1/kitchen/orders/{id}/status", orderId)
+                        .with(httpBasic(kitchenUsername, PASSWORD))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"ACCEPTED\",\"version\":0}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACCEPTED"))
+                .andExpect(jsonPath("$.version").value(1));
+    }
+
+    @Test
     void publishesOpenApiDescriptionAndSwaggerUi() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
@@ -198,16 +281,19 @@ class OrderApiIntegrationTest {
                 .andExpect(status().is3xxRedirection());
     }
 
-    private Long insertUser(String login) {
+    private Long insertUser(String login, String role) {
         return jdbcTemplate.queryForObject(
                 """
-                INSERT INTO users (username, password, fullname, street, city, state, zip, phone_number)
-                VALUES (?, ?, 'API User', '1 Test Street', 'Test City', 'TS', '12345', '5551234567')
+                INSERT INTO users (
+                    username, password, fullname, street, city, state, zip, phone_number, role
+                )
+                VALUES (?, ?, 'API User', '1 Test Street', 'Test City', 'TS', '12345', '5551234567', ?)
                 RETURNING id
                 """,
                 Long.class,
                 login,
-                passwordEncoder.encode(PASSWORD));
+                passwordEncoder.encode(PASSWORD),
+                role);
     }
 
     private String validOrderRequest() {
