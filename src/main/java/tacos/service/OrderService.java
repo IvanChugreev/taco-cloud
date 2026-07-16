@@ -3,6 +3,7 @@ package tacos.service;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +19,9 @@ import tacos.dto.UserProfile;
 import tacos.dto.api.CreateOrderRequest;
 import tacos.dto.api.OrderResponse;
 import tacos.dto.api.PageResponse;
+import tacos.event.OrderCancelled;
+import tacos.event.OrderCreated;
+import tacos.event.OrderStatusChanged;
 import tacos.mapper.ApiMapper;
 import tacos.mapper.OrderMapper;
 import tacos.mapper.UserMapper;
@@ -41,6 +45,7 @@ public class OrderService {
     private final OrderMapper orderMapper;
     private final UserMapper userMapper;
     private final ApiMapper apiMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     public OrderService(
             OrderRepository orderRepository,
@@ -48,13 +53,15 @@ public class OrderService {
             UserRepository userRepository,
             OrderMapper orderMapper,
             UserMapper userMapper,
-            ApiMapper apiMapper) {
+            ApiMapper apiMapper,
+            ApplicationEventPublisher eventPublisher) {
         this.orderRepository = orderRepository;
         this.tacoRepository = tacoRepository;
         this.userRepository = userRepository;
         this.orderMapper = orderMapper;
         this.userMapper = userMapper;
         this.apiMapper = apiMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -83,6 +90,7 @@ public class OrderService {
         List<Taco> tacos = loadTacos(form.tacoIds());
         BigDecimal totalPrice = calculateTotalPrice(tacos);
         TacoOrder savedOrder = orderRepository.save(orderMapper.toEntity(form, user, tacos, totalPrice));
+        publishOrderCreated(savedOrder);
         return savedOrder.getOrderUuid();
     }
 
@@ -103,7 +111,9 @@ public class OrderService {
                 request.ccCvv(),
                 tacos,
                 totalPrice);
-        return apiMapper.toOrderResponse(orderRepository.saveAndFlush(order));
+        TacoOrder savedOrder = orderRepository.saveAndFlush(order);
+        publishOrderCreated(savedOrder);
+        return apiMapper.toOrderResponse(savedOrder);
     }
 
     @Transactional(readOnly = true)
@@ -143,8 +153,10 @@ public class OrderService {
     public OrderResponse cancelOrder(UUID orderUuid, long expectedVersion, String username) {
         TacoOrder order = findOwnedOrder(orderUuid, username);
         verifyVersion(order, expectedVersion);
+        OrderStatus previousStatus = order.getStatus();
         order.transitionTo(OrderStatus.CANCELLED);
         orderRepository.flush();
+        publishOrderCancelled(order, previousStatus);
         return apiMapper.toOrderResponse(order);
     }
 
@@ -153,8 +165,17 @@ public class OrderService {
     public OrderResponse transitionOrder(UUID orderUuid, OrderStatus targetStatus, long expectedVersion) {
         TacoOrder order = findOrder(orderUuid);
         verifyVersion(order, expectedVersion);
+        OrderStatus previousStatus = order.getStatus();
         order.transitionTo(targetStatus);
         orderRepository.flush();
+        if (targetStatus == OrderStatus.CANCELLED) {
+            publishOrderCancelled(order, previousStatus);
+        } else {
+            eventPublisher.publishEvent(new OrderStatusChanged(
+                    order.getOrderUuid(),
+                    previousStatus,
+                    order.getStatus()));
+        }
         return apiMapper.toOrderResponse(order);
     }
 
@@ -243,6 +264,22 @@ public class OrderService {
                 .flatMap(taco -> taco.getIngredients().stream())
                 .map(Ingredient::getPrice)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private void publishOrderCreated(TacoOrder order) {
+        eventPublisher.publishEvent(new OrderCreated(
+                order.getOrderUuid(),
+                order.getUser().getUsername(),
+                order.getStatus(),
+                order.getTotalPrice()));
+    }
+
+    private void publishOrderCancelled(TacoOrder order, OrderStatus previousStatus) {
+        eventPublisher.publishEvent(new OrderCancelled(
+                order.getOrderUuid(),
+                order.getUser().getUsername(),
+                previousStatus,
+                order.getStatus()));
     }
 
     private static <T> List<T> toList(Iterable<T> values) {

@@ -6,3 +6,7 @@ spring:
     password: ${TEST_DB_PASSWORD:test}
   flyway:
     locations: classpath:db/migration,classpath:db/dev
+
+tacos:
+  kafka:
+    enabled: false

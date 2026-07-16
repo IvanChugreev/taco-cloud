@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import tacos.domain.DeliveryAddress;
 import tacos.domain.Ingredient;
 import tacos.domain.Ingredient.Type;
@@ -15,6 +16,9 @@ import tacos.domain.TacoOrder;
 import tacos.domain.User;
 import tacos.dto.OrderForm;
 import tacos.dto.TacoSummary;
+import tacos.event.OrderCancelled;
+import tacos.event.OrderCreated;
+import tacos.event.OrderStatusChanged;
 import tacos.mapper.ApiMapper;
 import tacos.mapper.OrderMapper;
 import tacos.mapper.UserMapper;
@@ -29,6 +33,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -48,6 +53,9 @@ class OrderServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private OrderService orderService;
 
     @BeforeEach
@@ -58,7 +66,8 @@ class OrderServiceTest {
                 userRepository,
                 new OrderMapper(),
                 new UserMapper(),
-                new ApiMapper());
+                new ApiMapper(),
+                eventPublisher);
     }
 
     @Test
@@ -100,6 +109,7 @@ class OrderServiceTest {
         assertEquals(OrderStatus.CREATED, savedOrder.getStatus());
         assertEquals(new BigDecimal("3.50"), savedOrder.getTotalPrice());
         assertEquals("Test User", savedOrder.getDeliveryAddress().getRecipientName());
+        verify(eventPublisher).publishEvent(any(OrderCreated.class));
     }
 
     @Test
@@ -136,6 +146,7 @@ class OrderServiceTest {
 
         verify(order).transitionTo(OrderStatus.ACCEPTED);
         verify(orderRepository).flush();
+        verify(eventPublisher).publishEvent(any(OrderStatusChanged.class));
     }
 
     @Test
@@ -151,6 +162,43 @@ class OrderServiceTest {
                 () -> orderService.transitionOrder(orderUuid, OrderStatus.ACCEPTED, 3L));
 
         verify(order, never()).transitionTo(any());
+    }
+
+    @Test
+    void cancelOrderPublishesCancellationEvent() {
+        UUID orderUuid = UUID.randomUUID();
+        TacoOrder order = mock(TacoOrder.class);
+        when(order.getVersion()).thenReturn(2L);
+        when(order.getOrderUuid()).thenReturn(orderUuid);
+        when(order.getStatus()).thenReturn(
+                OrderStatus.CREATED,
+                OrderStatus.CANCELLED,
+                OrderStatus.CANCELLED);
+        when(order.getUser()).thenReturn(user());
+        when(order.getCreatedAt()).thenReturn(Instant.parse("2026-07-10T00:00:00Z"));
+        when(order.getUpdatedAt()).thenReturn(Instant.parse("2026-07-10T00:00:00Z"));
+        when(order.getTotalPrice()).thenReturn(new BigDecimal("3.50"));
+        when(order.getDeliveryAddress()).thenReturn(new DeliveryAddress(
+                "Test User",
+                "1 Test Street",
+                "Test City",
+                "TS",
+                "12345"));
+        when(order.getTacos()).thenReturn(List.of());
+        when(orderRepository.findByOrderUuidAndUserUsername(orderUuid, "user"))
+                .thenReturn(Optional.of(order));
+
+        orderService.cancelOrder(orderUuid, 2L, "user");
+
+        verify(order).transitionTo(OrderStatus.CANCELLED);
+        verify(orderRepository).flush();
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        OrderCancelled event = assertInstanceOf(OrderCancelled.class, eventCaptor.getValue());
+        assertEquals(orderUuid, event.orderId());
+        assertEquals("user", event.username());
+        assertEquals(OrderStatus.CREATED, event.previousStatus());
+        assertEquals(OrderStatus.CANCELLED, event.status());
     }
 
     private OrderForm orderForm() {
