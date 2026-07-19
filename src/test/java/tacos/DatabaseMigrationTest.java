@@ -7,9 +7,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestConstructor;
 import org.springframework.transaction.annotation.Transactional;
+import tacos.outbox.OutboxEventRepository;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -21,9 +26,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DatabaseMigrationTest {
 
     private final JdbcTemplate jdbcTemplate;
+    private final OutboxEventRepository outboxEventRepository;
 
-    DatabaseMigrationTest(JdbcTemplate jdbcTemplate) {
+    DatabaseMigrationTest(
+            JdbcTemplate jdbcTemplate,
+            OutboxEventRepository outboxEventRepository) {
         this.jdbcTemplate = jdbcTemplate;
+        this.outboxEventRepository = outboxEventRepository;
     }
 
     @Test
@@ -38,7 +47,7 @@ class DatabaseMigrationTest {
                 "SELECT SUM(price) FROM ingredients",
                 BigDecimal.class);
 
-        assertEquals(7, successfulMigrations);
+        assertEquals(8, successfulMigrations);
         assertEquals(10, ingredientCount);
         assertEquals(new BigDecimal("12.50"), catalogPrice);
     }
@@ -58,6 +67,24 @@ class DatabaseMigrationTest {
         assertTrue(indexNames.contains("idx_orders_status"));
         assertTrue(indexNames.contains("idx_orders_created_at"));
 
+        List<String> outboxColumns = jdbcTemplate.queryForList(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'outbox_events'
+                """,
+                String.class);
+        assertTrue(outboxColumns.containsAll(List.of(
+                "event_id",
+                "aggregate_id",
+                "event_type",
+                "event_version",
+                "payload",
+                "created_at",
+                "published_at",
+                "attempts")));
+
         String insertUser = """
                 INSERT INTO users (
                     username, password, fullname, street, city, state, zip, phone_number
@@ -70,5 +97,44 @@ class DatabaseMigrationTest {
         jdbcTemplate.update(insertUser, user);
 
         assertThrows(DataIntegrityViolationException.class, () -> jdbcTemplate.update(insertUser, user));
+    }
+
+    @Test
+    @Transactional
+    void cleanupDeletesOnlyPublishedEventsOlderThanRetention() {
+        Instant now = Instant.now();
+        UUID oldEventId = UUID.randomUUID();
+        UUID recentEventId = UUID.randomUUID();
+        String insertEvent = """
+                INSERT INTO outbox_events (
+                    event_id, aggregate_id, event_type, event_version,
+                    payload, created_at, published_at, attempts
+                ) VALUES (?, ?, 'OrderCreated', 1, '{}'::jsonb, ?, ?, 1)
+                """;
+        jdbcTemplate.update(
+                insertEvent,
+                oldEventId,
+                UUID.randomUUID(),
+                Timestamp.from(now.minus(Duration.ofDays(10))),
+                Timestamp.from(now.minus(Duration.ofDays(9))));
+        jdbcTemplate.update(
+                insertEvent,
+                recentEventId,
+                UUID.randomUUID(),
+                Timestamp.from(now.minus(Duration.ofDays(2))),
+                Timestamp.from(now.minus(Duration.ofDays(1))));
+
+        int deleted = outboxEventRepository.deletePublishedBefore(now.minus(Duration.ofDays(7)));
+
+        assertEquals(1, deleted);
+        assertEquals(0, countOutboxEvent(oldEventId));
+        assertEquals(1, countOutboxEvent(recentEventId));
+    }
+
+    private int countOutboxEvent(UUID eventId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outbox_events WHERE event_id = ?",
+                Integer.class,
+                eventId);
     }
 }

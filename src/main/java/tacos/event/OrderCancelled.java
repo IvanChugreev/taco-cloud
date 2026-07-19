@@ -8,5 +8,5 @@ public record OrderCancelled(
         UUID orderId,
         String username,
         OrderStatus previousStatus,
-        OrderStatus status) {
+        OrderStatus status) implements OrderEvent {
 }

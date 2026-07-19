@@ -11,4 +11,6 @@ public record EventEnvelope<T>(
         UUID correlationId,
         UUID aggregateId,
         T payload) {
+
+    public static final int CURRENT_VERSION = 1;
 }

@@ -9,5 +9,5 @@ public record OrderCreated(
         UUID orderId,
         String username,
         OrderStatus status,
-        BigDecimal totalPrice) {
+        BigDecimal totalPrice) implements OrderEvent {
 }

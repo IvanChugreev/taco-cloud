@@ -3,7 +3,6 @@ package tacos.service;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +24,7 @@ import tacos.event.OrderStatusChanged;
 import tacos.mapper.ApiMapper;
 import tacos.mapper.OrderMapper;
 import tacos.mapper.UserMapper;
+import tacos.outbox.OrderEventOutboxService;
 import tacos.repository.OrderRepository;
 import tacos.repository.TacoRepository;
 import tacos.repository.UserRepository;
@@ -45,7 +45,7 @@ public class OrderService {
     private final OrderMapper orderMapper;
     private final UserMapper userMapper;
     private final ApiMapper apiMapper;
-    private final ApplicationEventPublisher eventPublisher;
+    private final OrderEventOutboxService orderEventOutboxService;
 
     public OrderService(
             OrderRepository orderRepository,
@@ -54,14 +54,14 @@ public class OrderService {
             OrderMapper orderMapper,
             UserMapper userMapper,
             ApiMapper apiMapper,
-            ApplicationEventPublisher eventPublisher) {
+            OrderEventOutboxService orderEventOutboxService) {
         this.orderRepository = orderRepository;
         this.tacoRepository = tacoRepository;
         this.userRepository = userRepository;
         this.orderMapper = orderMapper;
         this.userMapper = userMapper;
         this.apiMapper = apiMapper;
-        this.eventPublisher = eventPublisher;
+        this.orderEventOutboxService = orderEventOutboxService;
     }
 
     @Transactional(readOnly = true)
@@ -90,7 +90,7 @@ public class OrderService {
         List<Taco> tacos = loadTacos(form.tacoIds());
         BigDecimal totalPrice = calculateTotalPrice(tacos);
         TacoOrder savedOrder = orderRepository.save(orderMapper.toEntity(form, user, tacos, totalPrice));
-        publishOrderCreated(savedOrder);
+        appendOrderCreated(savedOrder);
         return savedOrder.getOrderUuid();
     }
 
@@ -112,7 +112,7 @@ public class OrderService {
                 tacos,
                 totalPrice);
         TacoOrder savedOrder = orderRepository.saveAndFlush(order);
-        publishOrderCreated(savedOrder);
+        appendOrderCreated(savedOrder);
         return apiMapper.toOrderResponse(savedOrder);
     }
 
@@ -156,7 +156,7 @@ public class OrderService {
         OrderStatus previousStatus = order.getStatus();
         order.transitionTo(OrderStatus.CANCELLED);
         orderRepository.flush();
-        publishOrderCancelled(order, previousStatus);
+        appendOrderCancelled(order, previousStatus);
         return apiMapper.toOrderResponse(order);
     }
 
@@ -169,9 +169,9 @@ public class OrderService {
         order.transitionTo(targetStatus);
         orderRepository.flush();
         if (targetStatus == OrderStatus.CANCELLED) {
-            publishOrderCancelled(order, previousStatus);
+            appendOrderCancelled(order, previousStatus);
         } else {
-            eventPublisher.publishEvent(new OrderStatusChanged(
+            orderEventOutboxService.append(new OrderStatusChanged(
                     order.getOrderUuid(),
                     previousStatus,
                     order.getStatus()));
@@ -266,16 +266,16 @@ public class OrderService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    private void publishOrderCreated(TacoOrder order) {
-        eventPublisher.publishEvent(new OrderCreated(
+    private void appendOrderCreated(TacoOrder order) {
+        orderEventOutboxService.append(new OrderCreated(
                 order.getOrderUuid(),
                 order.getUser().getUsername(),
                 order.getStatus(),
                 order.getTotalPrice()));
     }
 
-    private void publishOrderCancelled(TacoOrder order, OrderStatus previousStatus) {
-        eventPublisher.publishEvent(new OrderCancelled(
+    private void appendOrderCancelled(TacoOrder order, OrderStatus previousStatus) {
+        orderEventOutboxService.append(new OrderCancelled(
                 order.getOrderUuid(),
                 order.getUser().getUsername(),
                 previousStatus,

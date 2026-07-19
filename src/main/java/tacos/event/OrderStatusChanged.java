@@ -7,5 +7,5 @@ import java.util.UUID;
 public record OrderStatusChanged(
         UUID orderId,
         OrderStatus previousStatus,
-        OrderStatus status) {
+        OrderStatus status) implements OrderEvent {
 }

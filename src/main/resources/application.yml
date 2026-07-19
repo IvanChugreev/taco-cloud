@@ -25,17 +25,26 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     admin:
-      fail-fast: true
+      fail-fast: false
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
         spring.json.add.type.headers: false
+        delivery.timeout.ms: 5000
+        request.timeout.ms: 3000
+        max.block.ms: 3000
 
 tacos:
   kafka:
     enabled: ${KAFKA_ENABLED:true}
     orders-events-topic: ${KAFKA_ORDERS_TOPIC:orders.events}
+  outbox:
+    batch-size: ${OUTBOX_BATCH_SIZE:50}
+    publish-interval: ${OUTBOX_PUBLISH_INTERVAL:1s}
+    send-timeout: ${OUTBOX_SEND_TIMEOUT:10s}
+    retention: ${OUTBOX_RETENTION:7d}
+    cleanup-cron: "${OUTBOX_CLEANUP_CRON:0 0 3 * * *}"
 
 springdoc:
   paths-to-match: /api/v1/**

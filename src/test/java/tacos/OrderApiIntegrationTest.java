@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
@@ -78,6 +79,11 @@ class OrderApiIntegrationTest {
     @AfterEach
     void removeFixtures() {
         jdbcTemplate.update(
+                "DELETE FROM outbox_events WHERE aggregate_id IN "
+                        + "(SELECT order_uuid FROM orders WHERE user_id IN (?, ?))",
+                userId,
+                otherUserId);
+        jdbcTemplate.update(
                 "DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE user_id IN (?, ?))",
                 userId,
                 otherUserId);
@@ -114,6 +120,17 @@ class OrderApiIntegrationTest {
 
         JsonNode createdOrder = objectMapper.readTree(responseBody);
         String orderId = createdOrder.required("id").asText();
+        Integer pendingCreatedEvents = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM outbox_events
+                WHERE aggregate_id = ?::uuid
+                  AND event_type = 'OrderCreated'
+                  AND published_at IS NULL
+                """,
+                Integer.class,
+                orderId);
+        assertEquals(1, pendingCreatedEvents);
 
         mockMvc.perform(get("/api/v1/orders/{id}", orderId)
                         .with(httpBasic(username, PASSWORD)))

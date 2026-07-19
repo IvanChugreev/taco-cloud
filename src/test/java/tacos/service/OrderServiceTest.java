@@ -6,7 +6,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 import tacos.domain.DeliveryAddress;
 import tacos.domain.Ingredient;
 import tacos.domain.Ingredient.Type;
@@ -18,10 +17,12 @@ import tacos.dto.OrderForm;
 import tacos.dto.TacoSummary;
 import tacos.event.OrderCancelled;
 import tacos.event.OrderCreated;
+import tacos.event.OrderEvent;
 import tacos.event.OrderStatusChanged;
 import tacos.mapper.ApiMapper;
 import tacos.mapper.OrderMapper;
 import tacos.mapper.UserMapper;
+import tacos.outbox.OrderEventOutboxService;
 import tacos.repository.OrderRepository;
 import tacos.repository.TacoRepository;
 import tacos.repository.UserRepository;
@@ -54,7 +55,7 @@ class OrderServiceTest {
     private UserRepository userRepository;
 
     @Mock
-    private ApplicationEventPublisher eventPublisher;
+    private OrderEventOutboxService orderEventOutboxService;
 
     private OrderService orderService;
 
@@ -67,7 +68,7 @@ class OrderServiceTest {
                 new OrderMapper(),
                 new UserMapper(),
                 new ApiMapper(),
-                eventPublisher);
+                orderEventOutboxService);
     }
 
     @Test
@@ -109,7 +110,7 @@ class OrderServiceTest {
         assertEquals(OrderStatus.CREATED, savedOrder.getStatus());
         assertEquals(new BigDecimal("3.50"), savedOrder.getTotalPrice());
         assertEquals("Test User", savedOrder.getDeliveryAddress().getRecipientName());
-        verify(eventPublisher).publishEvent(any(OrderCreated.class));
+        verify(orderEventOutboxService).append(any(OrderCreated.class));
     }
 
     @Test
@@ -146,7 +147,7 @@ class OrderServiceTest {
 
         verify(order).transitionTo(OrderStatus.ACCEPTED);
         verify(orderRepository).flush();
-        verify(eventPublisher).publishEvent(any(OrderStatusChanged.class));
+        verify(orderEventOutboxService).append(any(OrderStatusChanged.class));
     }
 
     @Test
@@ -192,8 +193,8 @@ class OrderServiceTest {
 
         verify(order).transitionTo(OrderStatus.CANCELLED);
         verify(orderRepository).flush();
-        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
-        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        ArgumentCaptor<OrderEvent> eventCaptor = ArgumentCaptor.forClass(OrderEvent.class);
+        verify(orderEventOutboxService).append(eventCaptor.capture());
         OrderCancelled event = assertInstanceOf(OrderCancelled.class, eventCaptor.getValue());
         assertEquals(orderUuid, event.orderId());
         assertEquals("user", event.username());
